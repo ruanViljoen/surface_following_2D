@@ -1,4 +1,3 @@
-from simulator import Simulator
 import numpy as np
 import casadi as ca
 import pickle
@@ -68,48 +67,10 @@ T = experiment_paramters['T']
 ####################
 # Create simulator #
 ####################
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
-
-def create_dataset(Y_train):
-  X_train = np.array(range(11)).reshape(-1,1)
+from helper_functions import generate_train_and_test_data, create_simulator
+train_data, test_data = generate_train_and_test_data()
+simulator = create_simulator(test_data)
   
-  y_vec = np.empty((0,100))
-
-  for y_train in Y_train:
-    kernel = 1 * RBF(length_scale=0.2, length_scale_bounds=(1e-2, 1e2))
-    gaussian_process = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=9)
-    gpr = GaussianProcessRegressor(kernel=kernel, alpha=0.008)
-    gpr.fit(X_train, y_train)
-    x_sample = np.linspace(0,10,100).reshape(-1,1)
-    
-    y_vec = np.concatenate((y_vec,gpr.sample_y(x_sample,10).T/10+0.1), axis=0)
-    # plt.plot(x_sample/10, gpr.sample_y(x_sample,10)/10)
-    # plt.ylim(-0.1,1)
-    
-  
-    
-  return y_vec
-
-Y_train = np.array([
-    [ 1, 1.2, 1.7, 2 , 2 , 2  , 2 , 1.5, 2  , 1, 1 ],
-    [ 1, 0.5, 0.5, 1 , 1 , 0.5, 1 , 1.2, 0.8, 1, 1 ],
-    [ 1, 0.6, 0.4, 1 , 1 , 1.5, 1.8 , 2, 1.8, 1, 1 ],
-])
-
-y_vec = create_dataset(Y_train)
-
-train_data = y_vec[np.array(range(30))!=10]
-train_data = train_data.reshape((train_data.shape[0], train_data.shape[1],1))
-train_data = [trajectory.T for trajectory in train_data]
-test_data = y_vec[10]
-
-simulator = Simulator()
-num_basis = 10
-simulator.fit_rbf_linear(y_vec[22],num_basis) # Use custom surface
-# simulator.fit_quadratic(y_vec[11]) # Use custom surface
-# w_actual = simulator.w
-
 ##################################
 # Estimator and helper functions #
 ##################################
@@ -166,7 +127,7 @@ class MHE:
     solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
 
     # Initial guess
-    w0 = np.ones((nw))
+    w0 = np.ones((self.nw))
     # Solve
     res = solver(x0=w0)
 
@@ -178,33 +139,33 @@ class MHE:
 
     return w_opt, x_window
   
-def create_model_polynomial(nw):
-  x = ca.SX.sym('x')
-  w = ca.SX.sym('w',nw)
-  model_expr = 0
+# def create_model_polynomial(nw):
+#   x = ca.SX.sym('x')
+#   w = ca.SX.sym('w',nw)
+#   model_expr = 0
   
-  for i in range(nw):
-    model_expr += w[i]*x**i
+#   for i in range(nw):
+#     model_expr += w[i]*x**i
   
-  # model_expr = w[0] + w[1]*x + w[2]*x**2
-  return ca.Function('surface_model', [x,w], [model_expr])
+#   # model_expr = w[0] + w[1]*x + w[2]*x**2
+#   return ca.Function('surface_model', [x,w], [model_expr])
 
-def create_model_rbf(num_basis=10):
+# def create_model_rbf(num_basis=10):
   
-  # Centre points of rbfs
-  C = np.linspace(0, 1, num_basis)
+#   # Centre points of rbfs
+#   C = np.linspace(0, 1, num_basis)
 
-  # Parameters of the model
-  w = ca.SX.sym('w', num_basis)  # weights
-  b = 0.1
-  alpha = 37.4  # shape parameter
+#   # Parameters of the model
+#   w = ca.SX.sym('w', num_basis)  # weights
+#   b = 0.1
+#   alpha = 37.4  # shape parameter
 
-  # The model
-  x = ca.SX.sym('x')
-  phi = ca.vertcat(*[ca.exp(-alpha * (x - c) ** 2) for c in C])
-  model_expr = phi.T @ w + b
+#   # The model
+#   x = ca.SX.sym('x')
+#   phi = ca.vertcat(*[ca.exp(-alpha * (x - c) ** 2) for c in C])
+#   model_expr = phi.T @ w + b
   
-  return ca.Function('h', [x,w], [model_expr])
+#   return ca.Function('h', [x,w], [model_expr])
 
 def generate_path(model,x,w,p):
   x_sym = ca.MX.sym('x')
@@ -241,51 +202,11 @@ def generate_path_ground_truth(model,x,w,p):
   return ca.vertcat(c,d,theta)
 
 #####################
-# Surface modelling #
-#####################
-
-#####################
 # surface modelling #
 #####################
-
-if model_type == 'ground_truth':
-  nw = len(simulator.w)
-  h = create_model_rbf(num_basis)
-  
-elif model_type == 'local_quadratic':
-  nw = 3
-  h = create_model_polynomial(nw)
-  
-elif model_type == 'PPCA':
-  nw = 10
-  model = ProbabilisticPCA(train_data,modes=nw)
-  model.train(approx_type='rbf')
-  R = np.array([[model.meas_noise**2]])
-  
-  # Create h function
-  x = ca.SX.sym('x')
-  w = ca.SX.sym('w',nw)
-  H = model.H_ca_function(x)
-  b = model.b_ca_function(x)
-  h = ca.Function('h', [x,w], [H@w + b])
-  MHE_mu = 0.5
-  
-elif model_type == 'RBF':
-  nw = 10
-  R = np.array([[0.001]])
-  h = create_model_rbf(nw)
-  MHE_mu = 1e-4
-  
-elif model_type == 'poly':
-  nw = 3
-  R = np.array([[0.001]])
-  h = create_model_polynomial(nw)
-  MHE_mu = 1e-5
-  
-else: raise NameError('Unsupported model type') 
-  
-surface_model = h
-ndof = nw
+from helper_functions import get_h
+# h, ndof, MHE_mu, R = get_h(model_type)
+h, ndof, MHE_mu, R = get_h(model_type, custom_b_flag=True, custom_b_data=train_data[22].flatten())
 
 ######################
 # forward kinematics #
@@ -335,7 +256,7 @@ p_w_tcp = T_w_tcp[:2,2]
 theta_w_tcp = ca.atan2(T_w_tcp[1,0],T_w_tcp[0,0])
 
 # Create geometric path based on model of surface and task paramters
-path = generate_path(surface_model, x, w, l)
+path = generate_path(h, x, w, l)
 
 # # Create geometric path based on ground truth model of surface and task paramters
 # ground_truth_surface_model = create_model_rbf(num_basis)
@@ -395,17 +316,29 @@ tc.add_task_order0(
 #position, velocity, and accleration limits
 
 # add position limits
-# tc.add_task_order2(
-#     name="joint_limit",
-#     expr=q[0],
-#     ub=1,
-#     lb=0,
-#     hard=False,
-#     wn=10,
-#     zeta=1,
-#     weight=1,
-#     include_last = False
-# )
+tc.add_task_order2(
+    name="joint_0_limit",
+    expr=q[0],
+    ub=1,
+    lb=0,
+    hard=False,
+    wn=10,
+    zeta=1,
+    weight=1,
+    include_last = False
+)
+
+tc.add_task_order2(
+    name="joint_1_limit",
+    expr=q[1],
+    ub=np.pi/2,
+    lb=-np.pi/2,
+    hard=False,
+    wn=10,
+    zeta=1,
+    weight=1,
+    include_last = False
+)
 
 # add velocity limits
 tc.add_task_order1(
@@ -536,12 +469,12 @@ if model_type == 'poly' or model_type == 'RBF' or model_type == 'PPCA':
     mhe = MHE(window_length = MHE_horizon_length, h = h, R = R, mu = MHE_mu)
     
     # warm start estimator
-    meas = simulator.generateMeasurement(q)
-    x_meas, z_meas = f_fk_surface(q,meas).full()[:2,2]
-    idx = int(x_meas/0.01)
-    print(idx)
-    for i in range(idx):
-        _, _ = mhe.step(x=0.01*i, z=test_data[i])
+    # meas = simulator.generateMeasurement(q)
+    # x_meas, z_meas = f_fk_surface(q,meas).full()[:2,2]
+    # idx = int(x_meas/0.01)
+    # print(idx)
+    # for i in range(idx):
+    #     _, _ = mhe.step(x=0.01*i, z=test_data[i])
     
     # For keeping buffer from collapsing
     x_meas_prev = 0

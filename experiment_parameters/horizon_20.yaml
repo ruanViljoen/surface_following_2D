@@ -3,9 +3,9 @@
 #########################
 
 # Decide which surface model to use
-model_type: ground_truth
+# model_type: ground_truth
 # model_type: local_quadratic
-# model_type: poly
+model_type: poly
 # model_type: RBF
 # model_type: PPCA
 

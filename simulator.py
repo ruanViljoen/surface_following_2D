@@ -1003,9 +1003,19 @@ class Simulator:
             y=extra_surfaces[i][1],
             mode="lines",
             opacity=0.5,
-            line=dict(width=2, color="green"),
+            line=dict(width=3, color="green"),
           ),
         ]
+      else:
+        data += [
+          go.Scatter( # extra
+            x=extra_surfaces[i][0],
+            y=extra_surfaces[i][1],
+            mode="lines",
+            opacity=0.2,
+            line=dict(width=2, color="grey"),
+          ),
+        ]  
     if show_tf:
       data += [
         go.Scatter( # Frames x

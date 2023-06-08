@@ -168,7 +168,7 @@ def compare_outputs(all_logs,experiment_names, output_name):
   # axes[0].set_ylabel('x [m]')
   # axes[1].set_ylabel('y [m]')
   
-def plot_animation(simulator,all_logs,experiment_name,stride=1):
+def plot_animation(simulator,all_logs,experiment_name,h,stride=1):
   df_selected = all_logs[experiment_name]
   q_vec = np.array(list(df_selected['q']))[::stride]
   q_total_vec = [
@@ -186,10 +186,21 @@ def plot_animation(simulator,all_logs,experiment_name,stride=1):
   ]
 
   w_est_vec = np.array(list(df_selected['w']))[::stride]
-  # predicted_traj_vec = np.array([generate_predicted_trajectory(w,h) for w in w_est_vec])
+  predicted_traj_vec = np.array([generate_predicted_trajectory(w,h) for w in w_est_vec])
+
+  # Generate basis functions
+  basis_functions = []
+  nw = w_est_vec.shape[1]
+  for i in range(nw):
+    selection_matrix = np.zeros((nw,nw))
+    selection_matrix[i,i]=1
+    # if i <= 10:
+    basis_functions += [np.array([generate_predicted_trajectory(selection_matrix@w.reshape(-1,1),h) for w in w_est_vec])]
+    
   x_window_vec = list(df_selected['x_window'])[::stride]
   x_MPC_window_vec = list(df_selected['x_MPC_window'])[::stride]
-
+  MPC_horizon_length = x_MPC_window_vec[0].shape[1]
+  
   extra_surfaces = [
     [
       [
@@ -198,18 +209,21 @@ def plot_animation(simulator,all_logs,experiment_name,stride=1):
       ],
       [
         x_MPC_window_vec[i].flatten(),
-        # simulator.f_surface(x_MPC_window_vec[i].reshape(1,-1),np.repeat(w_est_vec[i].reshape(-1,1),MPC_horizon_length,axis=1)).full().flatten()
-        simulator.f_surface(x_MPC_window_vec[i]).full().flatten()
+        h(x_MPC_window_vec[i].reshape(1,-1),np.repeat(w_est_vec[i].reshape(-1,1),MPC_horizon_length,axis=1)).full().flatten()
+        # simulator.f_surface(x_MPC_window_vec[i]).full().flatten()
       ],
-      # predicted_traj_vec[i],
+      predicted_traj_vec[i],
     ] for i in range(len(x_MPC_window_vec))
   ]
+
+  # Add basis functions to extra_surfaces
+  for i in range(len(extra_surfaces)):
+    for j in range(len(basis_functions)):
+      extra_surfaces[i] += [basis_functions[j][i]]
+    
   opacity_vec = [1]
   
   return simulator.generateAnimation(q_total_vec,z_total_vec,opacity_vec,path_vec,extra_surfaces)
-
-
-
 
 def generate_predicted_trajectory(w,h):
   x_vec = np.linspace(-0,1,100)
@@ -219,8 +233,6 @@ def generate_predicted_trajectory(w,h):
     z_vec += [z.full().flatten()[0]]
   return x_vec, np.array(z_vec)
   
-
-
 def compare_animation(all_logs,experiment_names,stride=1):
   
   experiment_name = experiment_names[0]
@@ -266,9 +278,6 @@ def compare_animation(all_logs,experiment_names,stride=1):
 
 def save_animation(all_logs,experiment_name,stride):
   plot_animation(experiment_name,stride).write_html(experiment_name+".html")
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 def compare_sum_sqr_outputs(all_logs,experiment_names, output_name):
