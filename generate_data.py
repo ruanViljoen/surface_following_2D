@@ -44,6 +44,7 @@ task_orientation_wn = experiment_paramters['task_orientation_wn']
 task_orientation_zeta = experiment_paramters['task_orientation_zeta']
 task_orientation_hard = experiment_paramters['task_orientation_hard']
 task_orientation_weight = experiment_paramters['task_orientation_weight']
+task_orientation_tolerance = experiment_paramters['task_orientation_tolerance']
 
 task_progress_speed_K = experiment_paramters['task_progress_speed_K']
 task_progress_speed_hard = experiment_paramters['task_progress_speed_hard']
@@ -266,177 +267,181 @@ path = generate_path(h, x, w, l)
 
 task_translation_error = p_w_tcp - path[:2]
 tc.add_task_order2(
-    name="task_translation",
-    expr= task_translation_error,
-    wn=task_translation_wn,
-    zeta=task_translation_zeta,
-    weight=task_translation_weight,
+  name="task_translation",
+  expr= task_translation_error,
+  wn=task_translation_wn,
+  zeta=task_translation_zeta,
+  weight=task_translation_weight,
 )
 
 task_orientation_error = theta_w_tcp - path[2]
 tc.add_task_order2(
-    name="task_orientation",
-    expr= task_orientation_error,
-    wn=task_orientation_wn,
-    zeta=task_orientation_zeta,
-    weight=task_orientation_weight,
+  name="task_orientation",
+  expr= task_orientation_error,
+  wn=task_orientation_wn,
+  zeta=task_orientation_zeta,
+  weight=task_orientation_weight,
+  ub=task_orientation_tolerance,
+  lb=-task_orientation_tolerance,
+  include_last = False
+
 )
 
 theta_surface = path[2]+np.pi/2
 task_progress_speed_error = dx - s_dot_desired*ca.cos(theta_surface)
 tc.add_task_order1(
-    name="task_progress_speed",
-    expr= task_progress_speed_error,
-    K=task_progress_speed_K,
-    hard=task_progress_speed_hard,
-    weight=task_progress_speed_weight,
+  name="task_progress_speed",
+  expr= task_progress_speed_error,
+  K=task_progress_speed_K,
+  hard=task_progress_speed_hard,
+  weight=task_progress_speed_weight,
 )
 
 # regularization
 
 tc.add_task_order1(
-    name="task_velocity_regularization",
-    expr= dq,
-    K=3,
-    weight=1e-5,
+  name="task_velocity_regularization",
+  expr= dq,
+  K=3,
+  weight=1e-10,
 )
 
 tc.add_task_order0(
-    name="task_accelerations_regularization",
-    expr= ddq,
-    weight=1e-5,
+  name="task_accelerations_regularization",
+  expr= ddq,
+  weight=1e-10,
 )
 
 tc.add_task_order0(
-    name="task_accelerations_regularization2",
-    expr= ddx,
-    weight=1e-5,
+  name="task_accelerations_regularization2",
+  expr= ddx,
+  weight=1e-10,
 )
 
 #position, velocity, and accleration limits
 
 # add position limits
 tc.add_task_order2(
-    name="joint_0_limit",
-    expr=q[0],
-    ub=1,
-    lb=0,
-    hard=False,
-    wn=10,
-    zeta=1,
-    weight=1,
-    include_last = False
+  name="joint_0_limit",
+  expr=q[0],
+  ub=1,
+  lb=0,
+  hard=False,
+  wn=10,
+  zeta=1,
+  weight=1,
+  include_last = False
 )
 
 tc.add_task_order2(
-    name="joint_1_limit",
-    expr=q[1],
-    ub=np.pi/2,
-    lb=-np.pi/2,
-    hard=False,
-    wn=10,
-    zeta=1,
-    weight=1,
-    include_last = False
+  name="joint_1_limit",
+  expr=q[1],
+  hard=False,
+  wn=10,
+  zeta=1,
+  weight=1,
+  ub=np.pi/2,
+  lb=-np.pi/2,
+  include_last = False
 )
 
 # add velocity limits
 tc.add_task_order1(
-    name="velocity_limits",
-    expr=dq,
-    ub=velocity_limit,
-    lb=-velocity_limit,
-    hard=True,
-    K=10,
-    include_last = False
+  name="velocity_limits",
+  expr=dq,
+  ub=velocity_limit,
+  lb=-velocity_limit,
+  hard=True,
+  K=10,
+  include_last = False
 )
 
 # add acceleration limits
 tc.add_task_order0(
-    name="acceleration_limits",
-    expr=ddq,
-    ub=acceleration_limit,
-    lb=-acceleration_limit,
-    hard=True
+  name="acceleration_limits",
+  expr=ddq,
+  ub=acceleration_limit,
+  lb=-acceleration_limit,
+  hard=True
 )
 
 tc.define_output(
-    name="q",
-    expr=q,
-    only_first=True
+  name="q",
+  expr=q,
+  only_first=True
 )
 
 tc.define_output(
-    name="x_MPC_window",
-    expr=x,
-    only_first=False
+  name="x_MPC_window",
+  expr=x,
+  only_first=False
 )
 
 tc.define_output(
-    name="dq",
-    expr=dq,
-    only_first=True
+  name="dq",
+  expr=dq,
+  only_first=True
 )
 
 tc.define_output(
-    name="ddq",
-    expr=ddq,
-    only_first=True
+  name="ddq",
+  expr=ddq,
+  only_first=True
 )
 
 tc.define_output(
-    name="w",
-    expr=w,
-    only_first=True
+  name="w",
+  expr=w,
+  only_first=True
 )
 
 tc.define_output(
-    name="x",
-    expr=x,
-    only_first=True
+  name="x",
+  expr=x,
+  only_first=True
 )
 
 tc.define_output(
-    name="dx",
-    expr=dx,
-    only_first=True
+  name="dx",
+  expr=dx,
+  only_first=True
 )
 
 tc.define_output(
-    name="ddx",
-    expr=ddx,
-    only_first=True
+  name="ddx",
+  expr=ddx,
+  only_first=True
 )
 
 tc.define_output(
-    name="path",
-    expr=path,
-    only_first=True
+  name="path",
+  expr=path,
+  only_first=True
 )
 
 tc.define_output(
-    name="p_w_tcp",
-    expr=p_w_tcp,
-    only_first=True
+  name="p_w_tcp",
+  expr=p_w_tcp,
+  only_first=True
 )
 
 
 tc.define_output(
-    name="task_translation_error",
-    expr=task_translation_error,
-    only_first=True
+  name="task_translation_error",
+  expr=task_translation_error,
+  only_first=True
 )
 
 tc.define_output(
-    name="task_orientation_error",
-    expr=task_orientation_error,
-    only_first=True
+  name="task_orientation_error",
+  expr=task_orientation_error,
+  only_first=True
 )
 
 tc.define_output(
-    name="task_progress_speed_error",
-    expr=task_progress_speed_error,
-    only_first=True
+  name="task_progress_speed_error",
+  expr=task_progress_speed_error,
+  only_first=True
 )
 
 

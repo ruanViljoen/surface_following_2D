@@ -10,5 +10,5 @@ docker run -it -p 8888:8888 -e GRANT_SUDO=yes --user root -v <path_to_repository
 Once inside the container, start jupyter notebooks as follows:
 
 ```console
-jupyter notebook --allow_root
+jupyter lab --allow_root
 ```
