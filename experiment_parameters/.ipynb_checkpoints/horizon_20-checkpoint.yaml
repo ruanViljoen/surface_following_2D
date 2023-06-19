@@ -3,10 +3,10 @@
 #########################
 
 # Decide which surface model to use
-model_type: ground_truth
+# model_type: ground_truth
 # model_type: local_quadratic
 # model_type: poly
-# model_type: RBF
+model_type: RBF
 # model_type: PPCA
 
 # Constraint parameters (remember to rerun task specification cell after modifying these)
@@ -17,12 +17,13 @@ task_translation_wn: 10
 task_translation_zeta: 1
 task_translation_hard: False
 task_translation_weight: 1.0e+3
+task_translation_tolerance: 0.01
 
 task_orientation_wn: 10
 task_orientation_zeta: 1
 task_orientation_hard: False
 task_orientation_weight: 1.0e+3
-task_orientation_tolerance: 0
+task_orientation_tolerance: 0.01
 
 task_progress_speed_K: 10
 task_progress_speed_hard: False
@@ -30,7 +31,7 @@ task_progress_speed_weight: 1
 
 velocity_limit: 2
 # velocity_limit: 1e4
-acceleration_limit: 10
+acceleration_limit: 5
 # acceleration_limit: 1e4
 
 
@@ -47,4 +48,4 @@ MHE_horizon_length: 30
 buffer_distance_tolerance: 0.003
 
 freq: 200
-T: 2.5
+T: 3

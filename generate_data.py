@@ -3,15 +3,10 @@ import casadi as ca
 import pickle
 import time
 import pandas as pd
-
 from tqdm import tqdm
 from pseudo_etasl import TaskContext, generate_solver, utils
-
 import yaml
-
 import sys
-
-# Get the arguments from the command-line except the filename
 
 #########################
 # Experiment parameters #
@@ -39,6 +34,7 @@ task_translation_wn = experiment_paramters['task_translation_wn']
 task_translation_zeta = experiment_paramters['task_translation_zeta']
 task_translation_hard = experiment_paramters['task_translation_hard']
 task_translation_weight = experiment_paramters['task_translation_weight']
+task_translation_tolerance = experiment_paramters['task_translation_tolerance']
 
 task_orientation_wn = experiment_paramters['task_orientation_wn']
 task_orientation_zeta = experiment_paramters['task_orientation_zeta']
@@ -64,14 +60,7 @@ buffer_distance_tolerance = experiment_paramters['buffer_distance_tolerance']
 
 freq = experiment_paramters['freq']
 T = experiment_paramters['T']
-
-####################
-# Create simulator #
-####################
-from helper_functions import generate_train_and_test_data, create_simulator
-train_data, test_data = generate_train_and_test_data()
-simulator = create_simulator(test_data)
-  
+ 
 ##################################
 # Estimator and helper functions #
 ##################################
@@ -140,34 +129,6 @@ class MHE:
 
     return w_opt, x_window
   
-# def create_model_polynomial(nw):
-#   x = ca.SX.sym('x')
-#   w = ca.SX.sym('w',nw)
-#   model_expr = 0
-  
-#   for i in range(nw):
-#     model_expr += w[i]*x**i
-  
-#   # model_expr = w[0] + w[1]*x + w[2]*x**2
-#   return ca.Function('surface_model', [x,w], [model_expr])
-
-# def create_model_rbf(num_basis=10):
-  
-#   # Centre points of rbfs
-#   C = np.linspace(0, 1, num_basis)
-
-#   # Parameters of the model
-#   w = ca.SX.sym('w', num_basis)  # weights
-#   b = 0.1
-#   alpha = 37.4  # shape parameter
-
-#   # The model
-#   x = ca.SX.sym('x')
-#   phi = ca.vertcat(*[ca.exp(-alpha * (x - c) ** 2) for c in C])
-#   model_expr = phi.T @ w + b
-  
-#   return ca.Function('h', [x,w], [model_expr])
-
 def generate_path(model,x,w,p):
   x_sym = ca.MX.sym('x')
   f_expr = model(x_sym,w)
@@ -185,6 +146,7 @@ def generate_path(model,x,w,p):
   
   return ca.vertcat(c,d,theta)
 
+# To compare against ground truth error
 def generate_path_ground_truth(model,x,w,p):
   x_sym = ca.MX.sym('x')
   f_expr = model(x_sym,w)
@@ -202,18 +164,35 @@ def generate_path_ground_truth(model,x,w,p):
   
   return ca.vertcat(c,d,theta)
 
+####################
+# Create simulator #
+####################
+from helper_functions import generate_train_and_test_data, create_simulator
+train_data, test_data = generate_train_and_test_data()
+# test data is the data used to model the surface for the simulator
+simulator = create_simulator(test_data)
+
 #####################
 # surface modelling #
 #####################
 from helper_functions import get_h
+
 # h, ndof, MHE_mu, R = get_h(model_type)
+
+# These additional parameters can be used to set a mean other than 0.1 for the RBFs.
+# If model_type is not rbf then they are ignored.
 h, ndof, MHE_mu, R = get_h(model_type, custom_b_flag=True, custom_b_data=train_data[22].flatten())
 
 ######################
 # forward kinematics #
 ######################
 
+# Get casadi function for T_w_tcp.
+# Function arguments are the joint states q.
 f_fk = simulator.f_fk()
+
+# Get casadi function for T_w_surface.
+# Function arguments are the joint states q, as well as the laser distance measurement z.
 f_fk_surface = simulator.f_fk_surface()
 
 ######################
@@ -230,30 +209,38 @@ q, dq, ddq = tc.define_joint(
     resolution="Acceleration"
 )
 
+# Progress along surface in world x-direction 
 x, dx, ddx = tc.define_joint(
     name="x",
     ndof=1,
     resolution="Acceleration"
 )
 
-#define surface function parameters
+# Define basis function weights. Used for modelling surface.
 w = tc.define_input(
     name ="w",
     ndof = ndof
 )
 
+# Desired normal distance from surface.
 l = tc.define_input(
     name ="l",
     ndof = 1
 )
 
+# Desired progress speed, in terms of progress variable.
 s_dot_desired = tc.define_input(
     name ="s_dot_desired",
     ndof = 1
 )
 
+# Get expression for transform from world to TCP frame.
 T_w_tcp = f_fk(q)
+
+# Extract x,y position of TCP frame
 p_w_tcp = T_w_tcp[:2,2]
+
+# Extract orientation of tcp frame
 theta_w_tcp = ca.atan2(T_w_tcp[1,0],T_w_tcp[0,0])
 
 # Create geometric path based on model of surface and task paramters
@@ -272,6 +259,9 @@ tc.add_task_order2(
   wn=task_translation_wn,
   zeta=task_translation_zeta,
   weight=task_translation_weight,
+  ub=task_translation_tolerance,
+  lb=-task_translation_tolerance,
+  include_last = False
 )
 
 task_orientation_error = theta_w_tcp - path[2]
@@ -284,7 +274,6 @@ tc.add_task_order2(
   ub=task_orientation_tolerance,
   lb=-task_orientation_tolerance,
   include_last = False
-
 )
 
 theta_surface = path[2]+np.pi/2
@@ -298,7 +287,6 @@ tc.add_task_order1(
 )
 
 # regularization
-
 tc.add_task_order1(
   name="task_velocity_regularization",
   expr= dq,
@@ -460,6 +448,8 @@ print('DONE')
 ############################
 
 #simulation setup
+
+# Initial values
 q = q_init
 dq = np.array([0.0, 0.0, 0.0, 0.0])
 t0 = np.array([0.0])
@@ -471,19 +461,19 @@ x_window = [0]
 
 log_list = []
 if model_type == 'poly' or model_type == 'RBF' or model_type == 'PPCA':  
-    mhe = MHE(window_length = MHE_horizon_length, h = h, R = R, mu = MHE_mu)
-    
-    # warm start estimator
-    # meas = simulator.generateMeasurement(q)
-    # x_meas, z_meas = f_fk_surface(q,meas).full()[:2,2]
-    # idx = int(x_meas/0.01)
-    # print(idx)
-    # for i in range(idx):
-    #     _, _ = mhe.step(x=0.01*i, z=test_data[i])
-    
-    # For keeping buffer from collapsing
-    x_meas_prev = 0
-    z_meas_prev = 0
+  # Create MHE
+  mhe = MHE(window_length = MHE_horizon_length, h = h, R = R, mu = MHE_mu)
+  
+  # Warm start estimator
+  # meas = simulator.generateMeasurement(q)
+  # x_meas, z_meas = f_fk_surface(q,meas).full()[:2,2]
+  # idx = int(x_meas/0.01)
+  # for i in range(idx):
+  #   _, _ = mhe.step(x=0.01*i, z=test_data[i])
+  
+  # For keeping buffer from collapsing
+  x_meas_prev = 0
+  z_meas_prev = 0
   
 #simulation loop
 dt = 1/freq

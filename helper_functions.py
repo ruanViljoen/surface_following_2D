@@ -60,7 +60,7 @@ def create_model_polynomial(nw):
 def create_model_rbf(num_basis=10, custom_b_flag=False, custom_b_data=None):
   
   # Centre points of rbfs
-  C = np.linspace(0, 1, num_basis)
+  C = np.linspace(-0.5, 1.5, num_basis)
 
   # Parameters of the model
   w = ca.SX.sym('w', num_basis)  # weights
@@ -104,7 +104,7 @@ def get_h(model_type, custom_b_flag=False, custom_b_data=None):
       MHE_mu = 0.5
       
     elif model_type == 'RBF':
-      nw = 10
+      nw = 20
       R = np.array([[0.001]])
       h = create_model_rbf(nw,custom_b_flag, custom_b_data)
       MHE_mu = 1e-4
@@ -127,7 +127,7 @@ def fit_rbf(Y_train,num_basis=10):
   X_train = np.linspace(0,1,100)
   
   # Centers (chosen uniformly)
-  C = np.linspace(0, 1, num_basis)
+  C = np.linspace(-0.5, 1.5, num_basis)
   b = ca.SX.sym('b')  # bias
 
   # Parameters of the model
